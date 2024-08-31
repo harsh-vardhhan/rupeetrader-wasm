@@ -109,8 +109,8 @@ pub fn get_credit_spreads(json_str: &str) -> String {
 
                     let spread = (higher.strike_price - lower.strike_price) * NIFTY_LOTSIZE;
                     let net_credit = (lower_ltp - higher_ltp) * NIFTY_LOTSIZE;
-                    let max_profit = net_credit;
-                    let max_loss = spread - net_credit;
+                    let max_profit = net_credit.ceil(); // Round up to zero decimal places
+                    let max_loss = (spread - net_credit).ceil(); // Round up to zero decimal places
 
                     Some(CreditSpread {
                         sell_strike: lower.strike_price,
