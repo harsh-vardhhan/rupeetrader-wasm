@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -49,9 +50,15 @@ pub struct Instrument {
 pub fn print_instruments(json_str: &str) {
     match serde_json::from_str::<Vec<Instrument>>(json_str) {
         Ok(instruments) => {
-            // Successfully parsed instruments, now log each one
-            for instrument in instruments {
-                let instrument_json = serde_json::to_string(&instrument)
+            // Filter instruments where strike_price > underlying_spot_price
+            let filtered_instruments: Vec<&Instrument> = instruments
+                .iter()
+                .filter(|&instrument| instrument.strike_price > instrument.underlying_spot_price)
+                .collect();
+
+            // Log each filtered instrument to the browser console
+            for instrument in filtered_instruments {
+                let instrument_json = serde_json::to_string(instrument)
                     .unwrap_or_else(|_| String::from("Failed to serialize instrument"));
                 console::log_1(&JsValue::from_str(&instrument_json));
             }
