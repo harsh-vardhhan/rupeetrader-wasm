@@ -53,7 +53,7 @@ pub struct CreditSpread {
 }
 
 #[wasm_bindgen]
-pub fn print_instruments(json_str: &str) {
+pub fn get_credit_spreads(json_str: &str) -> String {
     const NIFTY_LOTSIZE: f64 = 25.0;
 
     match serde_json::from_str::<Vec<Instrument>>(json_str) {
@@ -123,12 +123,9 @@ pub fn print_instruments(json_str: &str) {
                 })
                 .collect();
 
-            // Log each CreditSpread to the browser console
-            for credit_spread in credit_spreads {
-                let credit_spread_json = serde_json::to_string(&credit_spread)
-                    .unwrap_or_else(|_| String::from("Failed to serialize credit spread"));
-                console::log_1(&JsValue::from_str(&credit_spread_json));
-            }
+            // Convert the credit_spreads array to a JSON string
+            serde_json::to_string(&credit_spreads)
+                .unwrap_or_else(|_| String::from("Failed to serialize credit spreads"))
         }
         Err(err) => {
             // Log the error to the browser console
@@ -136,6 +133,7 @@ pub fn print_instruments(json_str: &str) {
                 "Failed to parse JSON: {:?}",
                 err
             )));
+            String::from("Failed to parse JSON")
         }
     }
 }
