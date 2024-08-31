@@ -3,7 +3,7 @@ use serde_json;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
-#[derive(Serialize, Deserialize, Debug, Clone)] // Derive Clone trait
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MarketData {
     ltp: Option<f64>,
     volume: Option<u64>,
@@ -16,7 +16,7 @@ pub struct MarketData {
     prev_oi: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)] // Derive Clone trait
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OptionGreeks {
     vega: Option<f64>,
     theta: Option<f64>,
@@ -25,14 +25,14 @@ pub struct OptionGreeks {
     iv: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)] // Derive Clone trait
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OptionData {
     instrument_key: String,
     market_data: Option<MarketData>,
     option_greeks: Option<OptionGreeks>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)] // Derive Clone trait
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Instrument {
     expiry: String,
     strike_price: f64,
@@ -50,6 +50,7 @@ pub struct CreditSpread {
     net_credit: f64,
     max_profit: f64,
     max_loss: f64,
+    breakeven: f64,
 }
 
 #[wasm_bindgen]
@@ -58,8 +59,6 @@ pub fn get_credit_spreads(json_str: &str) -> String {
 
     match serde_json::from_str::<Vec<Instrument>>(json_str) {
         Ok(instruments) => {
-            // Filter instruments where strike_price > underlying_spot_price
-            // and market_data is not empty and ltp is not null
             let otm_strikes: Vec<Instrument> = instruments
                 .into_iter()
                 .filter(|instrument| {
@@ -75,7 +74,6 @@ pub fn get_credit_spreads(json_str: &str) -> String {
                 })
                 .collect();
 
-            // Sort the otm_strikes by strike_price in ascending order
             let mut sorted_otm_strikes = otm_strikes;
             sorted_otm_strikes.sort_by(|a, b| {
                 a.strike_price
@@ -83,13 +81,11 @@ pub fn get_credit_spreads(json_str: &str) -> String {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            // Create pairs of consecutive items
             let call_credit_spread_pairs: Vec<(Instrument, Instrument)> = sorted_otm_strikes
                 .windows(2)
                 .map(|window| (window[0].clone(), window[1].clone()))
                 .collect();
 
-            // Create CreditSpread objects
             let credit_spreads: Vec<CreditSpread> = call_credit_spread_pairs
                 .into_iter()
                 .filter_map(|(lower, higher)| {
@@ -109,8 +105,9 @@ pub fn get_credit_spreads(json_str: &str) -> String {
 
                     let spread = (higher.strike_price - lower.strike_price) * NIFTY_LOTSIZE;
                     let net_credit = (lower_ltp - higher_ltp) * NIFTY_LOTSIZE;
-                    let max_profit = net_credit.ceil(); // Round up to zero decimal places
-                    let max_loss = (spread - net_credit).ceil(); // Round up to zero decimal places
+                    let max_profit = net_credit.ceil();
+                    let max_loss = (spread - net_credit).ceil();
+                    let breakeven = (lower.strike_price + (net_credit / NIFTY_LOTSIZE)).ceil(); // Round up breakeven
 
                     Some(CreditSpread {
                         sell_strike: lower.strike_price,
@@ -119,16 +116,15 @@ pub fn get_credit_spreads(json_str: &str) -> String {
                         net_credit,
                         max_profit,
                         max_loss,
+                        breakeven,
                     })
                 })
                 .collect();
 
-            // Convert the credit_spreads array to a JSON string
             serde_json::to_string(&credit_spreads)
                 .unwrap_or_else(|_| String::from("Failed to serialize credit spreads"))
         }
         Err(err) => {
-            // Log the error to the browser console
             console::log_1(&JsValue::from_str(&format!(
                 "Failed to parse JSON: {:?}",
                 err
