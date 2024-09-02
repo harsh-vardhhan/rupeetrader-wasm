@@ -54,7 +54,7 @@ pub struct CreditSpread {
 }
 
 #[wasm_bindgen]
-pub fn get_credit_spreads(json_str: &str) -> String {
+pub fn bear_call_spread(json_str: &str) -> String {
     const NIFTY_LOTSIZE: f64 = 25.0;
 
     match serde_json::from_str::<Vec<Instrument>>(json_str) {
