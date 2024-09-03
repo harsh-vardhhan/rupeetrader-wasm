@@ -68,7 +68,15 @@ pub fn bear_call_spread(json_str: &str) -> String {
                         .call_options
                         .as_ref()
                         .and_then(|data| data.market_data.as_ref())
-                        .map_or(false, |market_data| market_data.ltp.is_some());
+                        .map_or(false, |market_data| {
+                            let ltp_is_some = market_data.ltp.is_some();
+                            let bid_ask_diff_ok =
+                                match (market_data.bid_price, market_data.ask_price) {
+                                    (Some(bid), Some(ask)) => (ask - bid).abs() <= 1.0,
+                                    _ => false,
+                                };
+                            ltp_is_some && bid_ask_diff_ok
+                        });
 
                     is_otm && has_valid_market_data
                 })
