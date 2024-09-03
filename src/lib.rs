@@ -72,7 +72,7 @@ pub fn bear_call_spread(json_str: &str) -> String {
                             let ltp_is_some = market_data.ltp.is_some();
                             let bid_ask_diff_ok =
                                 match (market_data.bid_price, market_data.ask_price) {
-                                    (Some(bid), Some(ask)) => (ask - bid).abs() <= 1.0,
+                                    (Some(bid), Some(ask)) => (ask - bid).abs() <= 2.0,
                                     _ => false,
                                 };
                             ltp_is_some && bid_ask_diff_ok
