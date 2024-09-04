@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json;
+use serde_wasm_bindgen::from_value;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -53,11 +53,27 @@ pub struct CreditSpread {
     breakeven: f64,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BearCallSpreadParams {
+    optionchain: String,
+    bid_ask_spread: bool,
+    risk_reward_ratio: bool,
+}
+
 #[wasm_bindgen]
-pub fn bear_call_spread(json_str: &str) -> String {
+pub fn bear_call_spread(params: JsValue) -> String {
     const NIFTY_LOTSIZE: f64 = 25.0;
 
-    match serde_json::from_str::<Vec<Instrument>>(json_str) {
+    // Deserialize the params from JsValue
+    let params: BearCallSpreadParams = match from_value(params) {
+        Ok(p) => p,
+        Err(_) => return String::from("Failed to parse parameters"),
+    };
+
+    // Extract the option chain JSON string from the params
+    let optionchain = &params.optionchain;
+
+    match serde_json::from_str::<Vec<Instrument>>(optionchain) {
         Ok(instruments) => {
             let otm_strikes: Vec<Instrument> = instruments
                 .into_iter()
@@ -75,7 +91,7 @@ pub fn bear_call_spread(json_str: &str) -> String {
                                     (Some(bid), Some(ask)) => (ask - bid).abs() <= 2.0,
                                     _ => false,
                                 };
-                            ltp_is_some && bid_ask_diff_ok
+                            ltp_is_some && (!params.bid_ask_spread || bid_ask_diff_ok)
                         });
 
                     is_otm && has_valid_market_data
@@ -94,7 +110,7 @@ pub fn bear_call_spread(json_str: &str) -> String {
                 .map(|window| (window[0].clone(), window[1].clone()))
                 .collect();
 
-            let credit_spreads: Vec<CreditSpread> = call_credit_spread_pairs
+            let mut credit_spreads: Vec<CreditSpread> = call_credit_spread_pairs
                 .into_iter()
                 .filter_map(|(lower, higher)| {
                     let lower_ltp = lower
@@ -128,6 +144,11 @@ pub fn bear_call_spread(json_str: &str) -> String {
                     })
                 })
                 .collect();
+
+            // Apply risk-reward ratio filter if enabled
+            if params.risk_reward_ratio {
+                credit_spreads.retain(|spread| spread.max_loss <= 3.0 * spread.max_profit);
+            }
 
             serde_json::to_string(&credit_spreads)
                 .unwrap_or_else(|_| String::from("Failed to serialize credit spreads"))
