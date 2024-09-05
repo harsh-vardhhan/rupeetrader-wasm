@@ -162,3 +162,109 @@ pub fn bear_call_spread(params: JsValue) -> String {
         }
     }
 }
+
+#[wasm_bindgen]
+pub fn bull_put_spread(params: JsValue) -> String {
+    const NIFTY_LOTSIZE: f64 = 25.0;
+
+    // Deserialize the params from JsValue
+    let params: BearCallSpreadParams = match from_value(params) {
+        Ok(p) => p,
+        Err(_) => return String::from("Failed to parse parameters"),
+    };
+
+    // Extract the option chain JSON string from the params
+    let optionchain = &params.optionchain;
+
+    match serde_json::from_str::<Vec<Instrument>>(optionchain) {
+        Ok(instruments) => {
+            // Filter for OTM put strikes (strike price < underlying spot price)
+            let otm_strikes: Vec<Instrument> = instruments
+                .into_iter()
+                .filter(|instrument| {
+                    let is_otm = instrument.strike_price < instrument.underlying_spot_price;
+
+                    let has_valid_market_data = instrument
+                        .put_options
+                        .as_ref()
+                        .and_then(|data| data.market_data.as_ref())
+                        .map_or(false, |market_data| {
+                            let ltp_is_some = market_data.ltp.is_some();
+                            let bid_ask_diff_ok =
+                                match (market_data.bid_price, market_data.ask_price) {
+                                    (Some(bid), Some(ask)) => (ask - bid).abs() <= 2.0,
+                                    _ => false,
+                                };
+                            ltp_is_some && (!params.bid_ask_spread || bid_ask_diff_ok)
+                        });
+
+                    is_otm && has_valid_market_data
+                })
+                .collect();
+
+            // Sort OTM strikes in descending order (higher strike first)
+            let mut sorted_otm_strikes = otm_strikes;
+            sorted_otm_strikes.sort_by(|a, b| {
+                b.strike_price
+                    .partial_cmp(&a.strike_price)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            // Create credit spread pairs (higher strike, lower strike)
+            let put_credit_spread_pairs: Vec<(Instrument, Instrument)> = sorted_otm_strikes
+                .windows(2)
+                .map(|window| (window[0].clone(), window[1].clone()))
+                .collect();
+
+            let mut credit_spreads: Vec<CreditSpread> = put_credit_spread_pairs
+                .into_iter()
+                .filter_map(|(higher, lower)| {
+                    let higher_ltp = higher
+                        .put_options
+                        .as_ref()
+                        .and_then(|data| data.market_data.as_ref())
+                        .and_then(|market_data| market_data.ltp)
+                        .unwrap_or(0.0);
+
+                    let lower_ltp = lower
+                        .put_options
+                        .as_ref()
+                        .and_then(|data| data.market_data.as_ref())
+                        .and_then(|market_data| market_data.ltp)
+                        .unwrap_or(0.0);
+
+                    let spread = (higher.strike_price - lower.strike_price) * NIFTY_LOTSIZE;
+                    let net_credit = (higher_ltp - lower_ltp) * NIFTY_LOTSIZE;
+                    let max_profit = net_credit.ceil();
+                    let max_loss = (spread - net_credit).ceil();
+                    let breakeven = (lower.strike_price - (net_credit / NIFTY_LOTSIZE)).ceil(); // Round down breakeven
+
+                    Some(CreditSpread {
+                        sell_strike: higher.strike_price,
+                        buy_strike: lower.strike_price,
+                        spread,
+                        net_credit,
+                        max_profit,
+                        max_loss,
+                        breakeven,
+                    })
+                })
+                .collect();
+
+            // Apply risk-reward ratio filter if enabled
+            if params.risk_reward_ratio {
+                credit_spreads.retain(|spread| spread.max_loss <= 3.0 * spread.max_profit);
+            }
+
+            serde_json::to_string(&credit_spreads)
+                .unwrap_or_else(|_| String::from("Failed to serialize credit spreads"))
+        }
+        Err(err) => {
+            console::log_1(&JsValue::from_str(&format!(
+                "Failed to parse JSON: {:?}",
+                err
+            )));
+            String::from("Failed to parse JSON")
+        }
+    }
+}
