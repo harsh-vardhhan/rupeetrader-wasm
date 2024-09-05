@@ -43,6 +43,14 @@ pub struct Instrument {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct BearCallSpreadParams {
+    optionchain: String,
+    bid_ask_spread: bool,
+    risk_reward_ratio: bool,
+}
+
+#[wasm_bindgen]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CreditSpread {
     sell_strike: f64,
     buy_strike: f64,
@@ -51,26 +59,18 @@ pub struct CreditSpread {
     max_profit: f64,
     max_loss: f64,
     breakeven: f64,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BearCallSpreadParams {
-    optionchain: String,
-    bid_ask_spread: bool,
-    risk_reward_ratio: bool,
+    type_: String, // New key added
 }
 
 #[wasm_bindgen]
 pub fn bear_call_spread(params: JsValue) -> String {
     const NIFTY_LOTSIZE: f64 = 25.0;
 
-    // Deserialize the params from JsValue
     let params: BearCallSpreadParams = match from_value(params) {
         Ok(p) => p,
         Err(_) => return String::from("Failed to parse parameters"),
     };
 
-    // Extract the option chain JSON string from the params
     let optionchain = &params.optionchain;
 
     match serde_json::from_str::<Vec<Instrument>>(optionchain) {
@@ -131,7 +131,7 @@ pub fn bear_call_spread(params: JsValue) -> String {
                     let net_credit = (lower_ltp - higher_ltp) * NIFTY_LOTSIZE;
                     let max_profit = net_credit.ceil();
                     let max_loss = (spread - net_credit).ceil();
-                    let breakeven = (lower.strike_price + (net_credit / NIFTY_LOTSIZE)).ceil(); // Round up breakeven
+                    let breakeven = (lower.strike_price + (net_credit / NIFTY_LOTSIZE)).ceil();
 
                     Some(CreditSpread {
                         sell_strike: lower.strike_price,
@@ -141,11 +141,11 @@ pub fn bear_call_spread(params: JsValue) -> String {
                         max_profit,
                         max_loss,
                         breakeven,
+                        type_: String::from("CE"), // Set type to "CE"
                     })
                 })
                 .collect();
 
-            // Apply risk-reward ratio filter if enabled
             if params.risk_reward_ratio {
                 credit_spreads.retain(|spread| spread.max_loss <= 3.0 * spread.max_profit);
             }
@@ -167,18 +167,15 @@ pub fn bear_call_spread(params: JsValue) -> String {
 pub fn bull_put_spread(params: JsValue) -> String {
     const NIFTY_LOTSIZE: f64 = 25.0;
 
-    // Deserialize the params from JsValue
     let params: BearCallSpreadParams = match from_value(params) {
         Ok(p) => p,
         Err(_) => return String::from("Failed to parse parameters"),
     };
 
-    // Extract the option chain JSON string from the params
     let optionchain = &params.optionchain;
 
     match serde_json::from_str::<Vec<Instrument>>(optionchain) {
         Ok(instruments) => {
-            // Filter for OTM put strikes (strike price < underlying spot price)
             let otm_strikes: Vec<Instrument> = instruments
                 .into_iter()
                 .filter(|instrument| {
@@ -202,7 +199,6 @@ pub fn bull_put_spread(params: JsValue) -> String {
                 })
                 .collect();
 
-            // Sort OTM strikes in descending order (higher strike first)
             let mut sorted_otm_strikes = otm_strikes;
             sorted_otm_strikes.sort_by(|a, b| {
                 b.strike_price
@@ -210,7 +206,6 @@ pub fn bull_put_spread(params: JsValue) -> String {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            // Create credit spread pairs (higher strike, lower strike)
             let put_credit_spread_pairs: Vec<(Instrument, Instrument)> = sorted_otm_strikes
                 .windows(2)
                 .map(|window| (window[0].clone(), window[1].clone()))
@@ -237,7 +232,7 @@ pub fn bull_put_spread(params: JsValue) -> String {
                     let net_credit = (higher_ltp - lower_ltp) * NIFTY_LOTSIZE;
                     let max_profit = net_credit.ceil();
                     let max_loss = (spread - net_credit).ceil();
-                    let breakeven = (lower.strike_price - (net_credit / NIFTY_LOTSIZE)).ceil(); // Round down breakeven
+                    let breakeven = (lower.strike_price - (net_credit / NIFTY_LOTSIZE)).ceil();
 
                     Some(CreditSpread {
                         sell_strike: higher.strike_price,
@@ -247,11 +242,11 @@ pub fn bull_put_spread(params: JsValue) -> String {
                         max_profit,
                         max_loss,
                         breakeven,
+                        type_: String::from("PE"), // Set type to "PE"
                     })
                 })
                 .collect();
 
-            // Apply risk-reward ratio filter if enabled
             if params.risk_reward_ratio {
                 credit_spreads.retain(|spread| spread.max_loss <= 3.0 * spread.max_profit);
             }
