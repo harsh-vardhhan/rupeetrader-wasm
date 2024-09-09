@@ -59,7 +59,8 @@ pub struct CreditSpread {
     max_profit: f64,
     max_loss: f64,
     breakeven: f64,
-    type_: String, // New key added
+    breakeven_percentage: f64, // New key added
+    type_: String,
 }
 
 #[wasm_bindgen]
@@ -133,6 +134,13 @@ pub fn bear_call_spread(params: JsValue) -> String {
                     let max_loss = (spread - net_credit).ceil();
                     let breakeven = (lower.strike_price + (net_credit / NIFTY_LOTSIZE)).ceil();
 
+                    // Calculate breakeven_percentage and trim it to 2 decimal places without rounding up
+                    let breakeven_percentage = ((breakeven - lower.underlying_spot_price).abs()
+                        / lower.underlying_spot_price)
+                        * 100.0;
+                    let breakeven_percentage_trimmed =
+                        (breakeven_percentage * 100.0).floor() / 100.0;
+
                     Some(CreditSpread {
                         sell_strike: lower.strike_price,
                         buy_strike: higher.strike_price,
@@ -141,7 +149,8 @@ pub fn bear_call_spread(params: JsValue) -> String {
                         max_profit,
                         max_loss,
                         breakeven,
-                        type_: String::from("CE"), // Set type to "CE"
+                        breakeven_percentage: breakeven_percentage_trimmed, // Set trimmed value
+                        type_: String::from("CE"),
                     })
                 })
                 .collect();
@@ -234,6 +243,13 @@ pub fn bull_put_spread(params: JsValue) -> String {
                     let max_loss = (spread - net_credit).ceil();
                     let breakeven = (lower.strike_price - (net_credit / NIFTY_LOTSIZE)).ceil();
 
+                    // Calculate breakeven_percentage and trim it to 2 decimal places without rounding up
+                    let breakeven_percentage = ((breakeven - lower.underlying_spot_price).abs()
+                        / lower.underlying_spot_price)
+                        * 100.0;
+                    let breakeven_percentage_trimmed =
+                        (breakeven_percentage * 100.0).floor() / 100.0;
+
                     Some(CreditSpread {
                         sell_strike: higher.strike_price,
                         buy_strike: lower.strike_price,
@@ -242,7 +258,8 @@ pub fn bull_put_spread(params: JsValue) -> String {
                         max_profit,
                         max_loss,
                         breakeven,
-                        type_: String::from("PE"), // Set type to "PE"
+                        breakeven_percentage: breakeven_percentage_trimmed, // Set trimmed value
+                        type_: String::from("PE"),
                     })
                 })
                 .collect();
