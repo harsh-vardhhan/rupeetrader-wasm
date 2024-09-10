@@ -107,8 +107,13 @@ pub fn bear_call_spread(params: JsValue) -> String {
             });
 
             let call_credit_spread_pairs: Vec<(Instrument, Instrument)> = sorted_otm_strikes
-                .windows(2)
-                .map(|window| (window[0].clone(), window[1].clone()))
+                .iter()
+                .enumerate()
+                .flat_map(|(i, lower)| {
+                    sorted_otm_strikes[i + 1..]
+                        .iter()
+                        .map(move |higher| (lower.clone(), higher.clone()))
+                })
                 .collect();
 
             let mut credit_spreads: Vec<CreditSpread> = call_credit_spread_pairs
@@ -216,8 +221,13 @@ pub fn bull_put_spread(params: JsValue) -> String {
             });
 
             let put_credit_spread_pairs: Vec<(Instrument, Instrument)> = sorted_otm_strikes
-                .windows(2)
-                .map(|window| (window[0].clone(), window[1].clone()))
+                .iter()
+                .enumerate()
+                .flat_map(|(i, higher)| {
+                    sorted_otm_strikes[i + 1..]
+                        .iter()
+                        .map(move |lower| (higher.clone(), lower.clone()))
+                })
                 .collect();
 
             let mut credit_spreads: Vec<CreditSpread> = put_credit_spread_pairs
