@@ -47,6 +47,7 @@ pub struct BearCallSpreadParams {
     optionchain: String,
     bid_ask_spread: bool,
     risk_reward_ratio: bool,
+    breakeven_percentage_sort: bool,
 }
 
 #[wasm_bindgen]
@@ -154,11 +155,20 @@ pub fn bear_call_spread(params: JsValue) -> String {
                         max_profit,
                         max_loss,
                         breakeven,
-                        breakeven_percentage: breakeven_percentage_trimmed, // Set trimmed value
+                        breakeven_percentage: breakeven_percentage_trimmed,
                         type_: String::from("CE"),
                     })
                 })
                 .collect();
+
+            // Sort by breakeven_percentage in descending order if breakeven_percentage_sort is true
+            if params.breakeven_percentage_sort {
+                credit_spreads.sort_by(|a, b| {
+                    b.breakeven_percentage
+                        .partial_cmp(&a.breakeven_percentage)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
 
             if params.risk_reward_ratio {
                 credit_spreads.retain(|spread| spread.max_loss <= 3.0 * spread.max_profit);
@@ -273,6 +283,15 @@ pub fn bull_put_spread(params: JsValue) -> String {
                     })
                 })
                 .collect();
+
+            // Sort by breakeven_percentage in descending order if breakeven_percentage_sort is true
+            if params.breakeven_percentage_sort {
+                credit_spreads.sort_by(|a, b| {
+                    b.breakeven_percentage
+                        .partial_cmp(&a.breakeven_percentage)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
 
             if params.risk_reward_ratio {
                 credit_spreads.retain(|spread| spread.max_loss <= 3.0 * spread.max_profit);
